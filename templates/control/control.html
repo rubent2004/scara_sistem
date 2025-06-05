@@ -1,0 +1,77 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Control Robot SCARA</title>
+    <link rel="stylesheet" href="{% static 'css/estilos.css' %}" />
+    <script src="{% static 'js/control.js' %}"></script>
+  </head>
+  <body>
+    <h1>CONTROL ROBOT SCARA</h1>
+
+    <div class="control-container">
+      <!-- Control para Eslabón 1 -->
+      <div class="joint-control">
+        <h2>Eslabón 1</h2>
+        <input type="range" id="q1Slider" min="-90" max="90" value="0" />
+        <div class="value-display">Valor: <span id="q1Value">0</span>°</div>
+        <div class="increment-control">
+          <button id="q1Minus">-</button>
+          <input type="number" id="q1Step" value="1" min="1" max="10" />
+          <button id="q1Plus">+</button>
+        </div>
+      </div>
+
+      <!-- Control para Eslabón 2 -->
+      <div class="joint-control">
+        <h2>Eslabón 2</h2>
+        <input type="range" id="q2Slider" min="-90" max="90" value="0" />
+        <div class="value-display">Valor: <span id="q2Value">0</span>°</div>
+        <div class="increment-control">
+          <button id="q2Minus">-</button>
+          <input type="number" id="q2Step" value="1" min="1" max="10" />
+          <button id="q2Plus">+</button>
+        </div>
+      </div>
+
+      <!-- Control para Eje Z -->
+      <div class="joint-control">
+        <h2>Eje Z</h2>
+        <input type="range" id="zSlider" min="-60" max="60" value="0" />
+        <div class="value-display">Valor: <span id="zValue">0</span> mm</div>
+        <div class="increment-control">
+          <button id="zMinus">-</button>
+          <input type="number" id="zStep" value="1" min="1" max="10" />
+          <button id="zPlus">+</button>
+        </div>
+      </div>
+
+      <!-- Control para Pinza -->
+      <div class="joint-control">
+        <h2>Pinza</h2>
+        <input type="range" id="gripSlider" min="0" max="100" value="0" />
+        <div class="value-display">
+          Apertura: <span id="gripValue">0</span>%
+        </div>
+      </div>
+    </div>
+
+    <div class="action-buttons">
+      <button id="sendBtn">Enviar</button>
+      <button id="homeBtn">Home</button>
+      <button id="saveBtn">Guardar Posición</button>
+      <button id="runBtn">Ejecutar Secuencia</button>
+      <button id="stopBtn" disabled>Detener</button>
+      <button id="clearBtn">Borrar Secuencia</button>
+    </div>
+
+    <div class="status-panel">
+      <h2>Estado</h2>
+      <div id="statusMessage">Modo Manual</div>
+      <div id="sequenceInfo">
+        Posiciones guardadas: <span id="sequenceCount">0</span>
+      </div>
+      <div id="arduinoResponse"></div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,906 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SCARA Control Pro</title>
+
+    <!-- Three.js (usado para la vista 3D) -->
+    <!-- 1. Import Map para Three.js 0.174.0 y sus addons -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.174.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <!-- 2. Cargamos los módulos ES -->
+    <script type="module" src="{% static 'js/scara_2d.module.js' %}"></script>
+    <script type="module" src="{% static 'js/scara_3d.module.js' %}"></script>
+    <!-- 3. Cargamos ps4_settings.js (debe venir después de scara_2d.module.js) -->
+    <script src="{% static 'js/ps4.js' %}"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}" />
+  </head>
+
+  <body class="bg-gray-900 text-white min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-gray-800 p-4 flex justify-between items-center shadow-md">
+      <h1 class="text-2xl font-bold">SCARA Control Pro</h1>
+      <div class="flex items-center space-x-4">
+        <!-- Botones principales -->
+        <button
+          id="view-toggle"
+          class="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600"
+        >
+          Ver 3D
+        </button>
+        <button
+          id="reset-btn"
+          class="px-3 py-1 bg-red-600 rounded hover:bg-red-500"
+        >
+          Reset
+        </button>
+        <!-- Indicador Arduino -->
+        <div id="arduino-status" class="flex items-center space-x-1">
+          <span
+            id="arduino-dot"
+            class="w-3 h-3 rounded-full bg-gray-500"
+          ></span>
+          <span class="text-sm">Arduino</span>
+        </div>
+        <!-- Indicador Gamepad -->
+        <div id="ps4-status" class="flex items-center space-x-1">
+          <span id="ps4-dot" class="w-3 h-3 rounded-full bg-gray-500"></span>
+          <span class="text-sm">Gamepad</span>
+        </div>
+        <!-- Botón Calibrar Control -->
+        <button
+          onclick="openCalibrationModal()"
+          class="px-3 py-1 bg-indigo-600 rounded hover:bg-indigo-500"
+        >
+          Calibrar Control
+        </button>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1 grid lg:grid-cols-3 gap-4 p-4">
+      <!-- Visualizador (2D / 3D) -->
+      <div class="lg:col-span-2 relative">
+        <!-- SVG 2D MEJORADO -->
+        <svg
+          id="robot-svg"
+          viewBox="0 0 300 240"
+          class="w-full bg-gray-800 rounded-lg shadow"
+          style="height: 320px"
+        >
+          <!-- Definimos degradados y estilos -->
+          <defs>
+            <!-- Degradado radial para los ejes -->
+            <radialGradient id="grad-base" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#4F46E5" stop-opacity="0.8" />
+              <stop offset="100%" stop-color="#3730A3" stop-opacity="0.8" />
+            </radialGradient>
+
+            <!-- Degradado para la tornillería vertical -->
+            <linearGradient id="grad-screw" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#9CA3AF" />
+              <stop offset="100%" stop-color="#6B7280" />
+            </linearGradient>
+
+            <!-- Sombra interior para las articulaciones -->
+            <filter
+              id="inner-shadow"
+              x="-50%"
+              y="-50%"
+              width="200%"
+              height="200%"
+            >
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="2"
+                flood-color="#000"
+                flood-opacity="0.5"
+              />
+            </filter>
+          </defs>
+
+          <style>
+            /* Estilos para los ejes y tornillos */
+            .rod {
+              stroke: #374151;
+              stroke-width: 12;
+              stroke-linecap: round;
+            }
+            .screw {
+              stroke: url(#grad-screw);
+              stroke-width: 6;
+              stroke-dasharray: 4 3;
+              stroke-linecap: round;
+            }
+
+            /* Estilos para los enlaces (brazos) */
+            .link1 {
+              stroke: #4f46e5;
+              stroke-width: 14;
+              stroke-linecap: round;
+              /* sombra suave */
+              filter: url(#inner-shadow);
+            }
+            .link2 {
+              stroke: #10b981;
+              stroke-width: 12;
+              stroke-linecap: round;
+              filter: url(#inner-shadow);
+            }
+
+            /* Estilos para la pinza */
+            .gripper {
+              stroke: #fbbf24;
+              stroke-width: 10;
+              stroke-linecap: round;
+            }
+
+            /* Estilos para las articulaciones */
+            .joint {
+              fill: #e5e7eb;
+              stroke: #6b7280;
+              stroke-width: 2;
+              filter: url(#inner-shadow);
+            }
+
+            /* Etiquetas de ángulo */
+            .angle-label {
+              fill: #f3f4f6;
+              font-size: 12px;
+              font-family: "Courier New", monospace;
+            }
+
+            /* Suave fondo de cuadrícula */
+            .grid-line {
+              stroke: #4b5563;
+              stroke-width: 0.5;
+              stroke-dasharray: 2 2;
+            }
+          </style>
+
+          <!-- Fondo de cuadrícula ligera (cada 20 px) -->
+          <!-- Líneas horizontales -->
+          <g>
+            <line x1="0" y1="60" x2="300" y2="60" class="grid-line" />
+            <line x1="0" y1="120" x2="300" y2="120" class="grid-line" />
+            <line x1="0" y1="180" x2="300" y2="180" class="grid-line" />
+          </g>
+          <!-- Líneas verticales -->
+          <g>
+            <line x1="50" y1="0" x2="50" y2="240" class="grid-line" />
+            <line x1="100" y1="0" x2="100" y2="240" class="grid-line" />
+            <line x1="150" y1="0" x2="150" y2="240" class="grid-line" />
+            <line x1="200" y1="0" x2="200" y2="240" class="grid-line" />
+            <line x1="250" y1="0" x2="250" y2="240" class="grid-line" />
+          </g>
+
+          <!-- Ejes verticales gruesos (2D “pilar” fijo) -->
+          <line class="rod" x1="130" y1="40" x2="130" y2="200" />
+          <line class="rod" x1="170" y1="40" x2="170" y2="200" />
+
+          <!-- Tornillo central (actúa de “hélice” para Z) -->
+          <line class="screw" x1="150" y1="40" x2="150" y2="200" />
+
+          <!-- La base en la parte superior, como un “bloque” -->
+          <rect
+            x="140"
+            y="10"
+            width="20"
+            height="30"
+            fill="#374151"
+            rx="4"
+            ry="4"
+          />
+
+          <!-- Brazos articulados (links) -->
+          <line
+            id="arm1-line"
+            class="link1"
+            x1="150"
+            y1="200"
+            x2="150"
+            y2="200"
+          />
+          <line
+            id="arm2-line"
+            class="link2"
+            x1="150"
+            y1="200"
+            x2="150"
+            y2="200"
+          />
+
+          <!-- Pinza -->
+          <line id="grip-left" class="gripper" x1="0" y1="0" x2="0" y2="0" />
+          <line id="grip-right" class="gripper" x1="0" y1="0" x2="0" y2="0" />
+
+          <!-- Articulaciones -->
+          <circle id="base-joint" class="joint" cx="150" cy="200" r="8" />
+          <circle id="arm1-joint" class="joint" cx="150" cy="200" r="6" />
+          <circle id="end-effector" class="joint" cx="150" cy="200" r="5" />
+
+          <!-- Etiquetas de ángulo -->
+          <text id="label-arm1" class="angle-label" x="0" y="0">θ₁=0°</text>
+          <text id="label-arm2" class="angle-label" x="0" y="0">θ₂=0°</text>
+        </svg>
+
+        <!-- Canvas 3D -->
+        <canvas
+          id="canvas3d"
+          class="hidden bg-gray-800 rounded-lg shadow"
+          style="width: 100%; height: 320px"
+        ></canvas>
+
+        <!-- Posición -->
+        <p id="position-display" class="font-mono text-center text-lg mt-2">
+          Z=20cm | θ₁=45° | θ₂=-30°
+        </p>
+        <div
+          id="console"
+          class="bg-black text-green-400 font-mono text-sm rounded-lg p-3 h-40 overflow-y-auto border border-gray-700"
+        >
+          <!-- Aquí se irán agregando los mensajes -->
+        </div>
+      </div>
+
+      <!-- Panel de Controles -->
+      <div class="space-y-6">
+        <!-- Ingreso Directo -->
+        <div
+          class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700"
+        >
+          <h2 class="text-lg font-semibold mb-2 text-gray-200">
+            Ingreso Directo
+          </h2>
+          <div class="grid grid-cols-4 gap-2 mb-3">
+            <input
+              id="input-base"
+              type="number"
+              min="0"
+              max="40"
+              value="20"
+              class="bg-gray-700 p-2 rounded text-center text-white focus:ring focus:ring-blue-500"
+              placeholder="Base Z"
+            />
+            <input
+              id="input-arm1"
+              type="number"
+              min="-90"
+              max="90"
+              value="45"
+              class="bg-gray-700 p-2 rounded text-center text-white focus:ring focus:ring-blue-500"
+              placeholder="Brazo 1"
+            />
+            <input
+              id="input-arm2"
+              type="number"
+              min="-120"
+              max="60"
+              value="-30"
+              class="bg-gray-700 p-2 rounded text-center text-white focus:ring focus:ring-blue-500"
+              placeholder="Brazo 2"
+            />
+            <!-- NUEVO: Input para Velocidad Manual -->
+            <input
+              id="input-speed"
+              type="number"
+              min="1"
+              max="1000"
+              value="500"
+              class="bg-gray-700 p-2 rounded text-center text-white focus:ring focus:ring-blue-500"
+              placeholder="Velocidad"
+            />
+          </div>
+          <button
+            id="btn-manual-send"
+            class="w-full bg-blue-600 hover:bg-blue-500 p-2 rounded text-white font-medium"
+          >
+            Enviar Valores
+          </button>
+        </div>
+
+        <!-- Sliders Finos -->
+        <div
+          class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700"
+        >
+          <h2 class="text-lg font-semibold mb-2 text-gray-200">
+            Control Preciso
+          </h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-gray-300 mb-1">
+                Z (<span id="val-base" class="text-indigo-400">20</span> cm)
+              </label>
+              <input
+                id="base-slider"
+                type="range"
+                min="0"
+                max="40"
+                value="20"
+                class="w-full"
+              />
+            </div>
+            <div>
+              <label class="block text-gray-300 mb-1">
+                Brazo 1 (<span id="val-arm1" class="text-indigo-400">45</span>°)
+              </label>
+              <input
+                id="arm1-slider"
+                type="range"
+                min="-90"
+                max="90"
+                value="45"
+                class="w-full"
+              />
+            </div>
+            <div>
+              <label class="block text-gray-300 mb-1">
+                Brazo 2 (<span id="val-arm2" class="text-indigo-400">-30</span
+                >°)
+              </label>
+              <input
+                id="arm2-slider"
+                type="range"
+                min="-120"
+                max="60"
+                value="-30"
+                class="w-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Velocidad Única (Global) -->
+        <div
+          class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700"
+        >
+          <h2 class="text-lg font-semibold mb-2 text-gray-200">
+            Velocidad Global
+          </h2>
+          <div class="flex items-center space-x-3">
+            <label class="text-gray-300 w-24">Velocidad:</label>
+            <input
+              id="speed-global"
+              type="range"
+              min="1"
+              max="100"
+              value="50"
+              class="flex-1"
+            />
+            <span
+              id="pct-speed"
+              class="w-12 text-right font-mono text-green-400"
+            >
+              50 %</span
+            >
+            <!-- NUEVO: Input Numérico para Velocidad Global -->
+            <input
+              id="speed-global-input"
+              type="number"
+              min="1"
+              max="100"
+              value="50"
+              class="bg-gray-700 p-1 rounded text-center text-white w-16 focus:ring focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <!-- Botones de acción -->
+        <div class="grid grid-cols-2 gap-3">
+          <button
+            onclick="saveCurrentPosition()"
+            class="modern-btn bg-green-600 hover:bg-green-500 py-2 rounded text-white font-medium"
+          >
+            💾 Guardar
+          </button>
+          <button
+            onclick="executeSequence(1)"
+            class="modern-btn bg-purple-600 hover:bg-purple-500 py-2 rounded text-white font-medium"
+          >
+            ▶️ Secuencia
+          </button>
+          <button
+            id="btn-grip-toggle"
+            class="modern-btn bg-yellow-600 hover:bg-yellow-500 py-2 rounded text-white font-medium col-span-2"
+          >
+            🤏 Tomar / Soltar
+          </button>
+          <!-- NUEVO: Botón “Aplicar Movimientos” que dispara la función en ps4_settings.js -->
+          <button
+            id="apply-movement-btn"
+            class="modern-btn bg-indigo-600 hover:bg-indigo-500 py-2 rounded text-white font-medium col-span-2"
+          >
+            🚀 Aplicar Movimientos
+          </button>
+        </div>
+
+        <!-- Panel de Gestión de Posiciones y Secuencias -->
+        <div
+          class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700"
+        >
+          <h2 class="text-lg font-semibold mb-2 text-gray-200">
+            Gestión de Posiciones
+          </h2>
+          <div class="space-y-2">
+            <select
+              id="saved-positions"
+              class="w-full bg-gray-700 text-white p-2 rounded"
+            >
+              <option value="">Seleccionar posición guardada...</option>
+            </select>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                onclick="loadSelectedPosition()"
+                class="bg-blue-600 hover:bg-blue-500 py-1 px-2 rounded text-white text-sm"
+              >
+                Cargar
+              </button>
+              <button
+                onclick="deleteSelectedPosition()"
+                class="bg-red-600 hover:bg-red-500 py-1 px-2 rounded text-white text-sm"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel de Secuencias -->
+        <div
+          class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700"
+        >
+          <h2 class="text-lg font-semibold mb-2 text-gray-200">Secuencias</h2>
+          <div class="space-y-2">
+            <select
+              id="saved-sequences"
+              class="w-full bg-gray-700 text-white p-2 rounded"
+            >
+              <option value="">Seleccionar secuencia...</option>
+            </select>
+            <button
+              onclick="executeSelectedSequence()"
+              class="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded text-white font-medium"
+            >
+              ▶️ Ejecutar Secuencia
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Modal de Calibración (estilo emulador) -->
+    <div
+      id="calibration-modal"
+      class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50"
+    >
+      <div
+        class="bg-gray-800 rounded-lg w-4/5 max-w-3xl shadow-2xl overflow-hidden"
+      >
+        <!-- Cabecera del Modal -->
+        <div
+          class="bg-gray-900 px-6 py-4 flex justify-between items-center border-b border-gray-700"
+        >
+          <h2 class="text-xl font-semibold text-gray-200">
+            Configuración del Gamepad
+          </h2>
+          <button
+            onclick="closeCalibrationModal()"
+            class="text-gray-400 hover:text-gray-200"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Cuerpo del Modal con pestañas -->
+        <div class="p-6 grid grid-cols-3 gap-4">
+          <!-- Navegación (pestañas) -->
+          <nav class="col-span-1 space-y-2">
+            <button
+              class="tab-btn w-full text-left px-4 py-2 rounded bg-indigo-600 text-white font-medium"
+              data-tab="mapping"
+            >
+              Mapeo de Botones
+            </button>
+            <button
+              class="tab-btn w-full text-left px-4 py-2 rounded hover:bg-gray-700 text-gray-400 font-medium bg-gray-800"
+              data-tab="sensitivity"
+            >
+              Sensibilidad
+            </button>
+            <button
+              class="tab-btn w-full text-left px-4 py-2 rounded hover:bg-gray-700 text-gray-400 font-medium bg-gray-800"
+              data-tab="info"
+            >
+              Información
+            </button>
+            <button
+              class="tab-btn w-full text-left px-4 py-2 rounded hover:bg-gray-700 text-gray-400 font-medium bg-gray-800"
+              data-tab="test"
+            >
+              Prueba Inputs
+            </button>
+          </nav>
+
+          <!-- Contenido de Mapeo -->
+          <section id="tab-mapping" class="col-span-2 space-y-4">
+            <h3 class="text-lg font-semibold text-gray-200">
+              Mapeo de Botones
+            </h3>
+            <div class="grid grid-cols-2 gap-4">
+              <!-- Asignar Brazo 1 -->
+              <div class="flex flex-col">
+                <label class="text-gray-300 mb-1">Mover Brazo 1</label>
+                <select
+                  id="map-arm1"
+                  class="bg-gray-700 text-white p-2 rounded focus:ring focus:ring-indigo-500"
+                >
+                  <option value="dpad-left/dpad-right">
+                    D-Pad ← / → (predeterminado)
+                  </option>
+                  <option value="axis-left-x">Stick Izquierdo X</option>
+                  <option value="l2/r2">L2 / R2</option>
+                </select>
+              </div>
+              <!-- Asignar Brazo 2 -->
+              <div class="flex flex-col">
+                <label class="text-gray-300 mb-1">Mover Brazo 2</label>
+                <select
+                  id="map-arm2"
+                  class="bg-gray-700 text-white p-2 rounded focus:ring focus:ring-indigo-500"
+                >
+                  <option value="l1/r1">L1 / R1 (predeterminado)</option>
+                  <option value="dpad-up/dpad-down">D-Pad ↑ / ↓</option>
+                  <option value="axis-left-y">Stick Izquierdo Y</option>
+                </select>
+              </div>
+              <!-- Asignar Base -->
+              <div class="flex flex-col">
+                <label class="text-gray-300 mb-1">Mover Eje Z (Base)</label>
+                <select
+                  id="map-base"
+                  class="bg-gray-700 text-white p-2 rounded focus:ring focus:ring-indigo-500"
+                >
+                  <option value="dpad-up/dpad-down">
+                    D-Pad ↑ / ↓ (predeterminado)
+                  </option>
+                  <option value="axis-right-y">Stick Derecho Y</option>
+                  <option value="l2/r2">L2 / R2</option>
+                </select>
+              </div>
+              <!-- Asignar Pinza -->
+              <div class="flex flex-col">
+                <label class="text-gray-300 mb-1">Abrir/Cerrar Pinza</label>
+                <select
+                  id="map-grip"
+                  class="bg-gray-700 text-white p-2 rounded focus:ring focus:ring-indigo-500"
+                >
+                  <option value="x/o">❌ / ⭕ (predeterminado)</option>
+                  <option value="triangle/square">△ / ◻</option>
+                  <option value="r1/l1">R1 / L1</option>
+                </select>
+              </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-4">
+              <button
+                onclick="resetToDefaultConfig()"
+                class="bg-yellow-600 hover:bg-yellow-500 px-4 py-2 rounded text-white font-medium"
+              >
+                Restaurar Predeterminados
+              </button>
+              <button
+                onclick="saveCustomConfig()"
+                class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded text-white font-medium"
+              >
+                Guardar Configuración
+              </button>
+            </div>
+          </section>
+
+          <!-- Contenido de Sensibilidad -->
+          <section id="tab-sensitivity" class="col-span-2 hidden space-y-4">
+            <h3 class="text-lg font-semibold text-gray-200">
+              Sensibilidad de Sticks
+            </h3>
+            <div class="grid grid-cols-1 gap-4">
+              <div class="flex flex-col">
+                <label class="text-gray-300 mb-1"
+                  >Sensibilidad Stick Izquierdo
+                  <span id="sens-left-display" class="text-indigo-400"
+                    >1.0×</span
+                  ></label
+                >
+                <input
+                  id="sens-left"
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.1"
+                  value="1"
+                  class="w-full"
+                />
+              </div>
+              <div class="flex flex-col">
+                <label class="text-gray-300 mb-1"
+                  >Sensibilidad Stick Derecho
+                  <span id="sens-right-display" class="text-indigo-400"
+                    >1.0×</span
+                  ></label
+                >
+                <input
+                  id="sens-right"
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.1"
+                  value="1"
+                  class="w-full"
+                />
+              </div>
+            </div>
+          </section>
+
+          <!-- Contenido de Información -->
+          <section
+            id="tab-info"
+            class="col-span-2 hidden space-y-4 text-gray-300"
+          >
+            <h3 class="text-lg font-semibold text-gray-200">Información</h3>
+            <p>
+              Usa este panel para reasignar qué botones del DualShock 4 (o
+              gamepad equivalente) controlan cada función del SCARA.
+            </p>
+            <p>
+              Para que el navegador reconozca el gamepad, debe estar emparejado
+              y visible en el sistema operativo.
+            </p>
+            <p>
+              Al guardar la configuración personalizada, se aplicará en tiempo
+              real.
+            </p>
+          </section>
+
+          <!-- Contenido de Prueba de Inputs -->
+          <section
+            id="tab-test"
+            class="col-span-2 hidden space-y-4 text-gray-300"
+          >
+            <h3 class="text-lg font-semibold text-gray-200">
+              Prueba de Inputs
+            </h3>
+            <p class="text-gray-400">
+              Presiona los botones o mueve los ejes en tu gamepad para ver la
+              detección en tiempo real.
+            </p>
+            <div class="grid grid-cols-4 gap-4">
+              <!-- Indicadores de botones -->
+              <div class="space-y-2">
+                <h4 class="text-gray-200 font-medium">Botones</h4>
+                <div
+                  id="btn-x"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  X
+                </div>
+                <div
+                  id="btn-o"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  O
+                </div>
+                <div
+                  id="btn-square"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  □
+                </div>
+                <div
+                  id="btn-triangle"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  △
+                </div>
+                <div
+                  id="btn-l1"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  L1
+                </div>
+                <div
+                  id="btn-r1"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  R1
+                </div>
+                <div
+                  id="btn-l2"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  L2
+                </div>
+                <div
+                  id="btn-r2"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  R2
+                </div>
+                <div
+                  id="btn-dpad-up"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  ↑
+                </div>
+                <div
+                  id="btn-dpad-down"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  ↓
+                </div>
+                <div
+                  id="btn-dpad-left"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  ←
+                </div>
+                <div
+                  id="btn-dpad-right"
+                  class="gamepad-button bg-gray-600 rounded text-center py-2"
+                >
+                  →
+                </div>
+              </div>
+              <!-- Indicadores de ejes -->
+              <div class="space-y-2">
+                <h4 class="text-gray-200 font-medium">Ejes Analógicos</h4>
+                <div
+                  id="axis-left-stick-left"
+                  class="gamepad-axis bg-gray-600 rounded text-center py-2"
+                >
+                  L-Stick ←
+                </div>
+                <div
+                  id="axis-left-stick-right"
+                  class="gamepad-axis bg-gray-600 rounded text-center py-2"
+                >
+                  L-Stick →
+                </div>
+                <div
+                  id="axis-left-stick-up"
+                  class="gamepad-axis bg-gray-600 rounded text-center py-2"
+                >
+                  L-Stick ↑
+                </div>
+                <div
+                  id="axis-left-stick-down"
+                  class="gamepad-axis bg-gray-600 rounded text-center py-2"
+                >
+                  L-Stick ↓
+                </div>
+                <div
+                  id="axis-right-stick-left"
+                  class="gamepad-axis bg-gray-600 rounded text-center py-2"
+                >
+                  R-Stick ←
+                </div>
+                <div
+                  id="axis-right-stick-right"
+                  class="gamepad-axis bg-gray-600 rounded text-center py-2"
+                >
+                  R-Stick →
+                </div>
+                <div
+                  id="axis-right-stick-up"
+                  class="gamepad-axis bg-gray-600 rounded text-center py-2"
+                >
+                  R-Stick ↑
+                </div>
+                <div
+                  id="axis-right-stick-down"
+                  class="gamepad-axis bg-gray-600 rounded text-center py-2"
+                >
+                  R-Stick ↓
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- Script para manejar la consola y sincronizar inputs de velocidad -->
+    <script>
+      // Función para loguear mensajes en la "terminal"
+      function logMessage(message, success = true) {
+        const consoleDiv = document.getElementById("console");
+        const msgElem = document.createElement("div");
+        msgElem.textContent = message;
+        msgElem.classList.add("font-mono", "text-sm", "mb-1");
+        if (success) {
+          msgElem.classList.add("text-green-400");
+        } else {
+          msgElem.classList.add("text-red-500");
+        }
+        consoleDiv.appendChild(msgElem);
+        // Auto‐scroll hacia abajo
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+      }
+
+      // Sincronizar slider de velocidad global con input numérico
+      const speedGlobalSlider = document.getElementById("speed-global");
+      const speedGlobalInput = document.getElementById("speed-global-input");
+      const pctSpeedLabel = document.getElementById("pct-speed");
+
+      speedGlobalSlider.addEventListener("input", () => {
+        const val = speedGlobalSlider.value;
+        pctSpeedLabel.textContent = val + " %";
+        speedGlobalInput.value = val;
+      });
+
+      speedGlobalInput.addEventListener("input", () => {
+        let val = parseInt(speedGlobalInput.value);
+        if (isNaN(val) || val < 1) val = 1;
+        if (val > 100) val = 100;
+        speedGlobalInput.value = val;
+        speedGlobalSlider.value = val;
+        pctSpeedLabel.textContent = val + " %";
+      });
+
+      // Ejemplo de uso de logMessage cuando se envía un comando manual
+      document
+        .getElementById("btn-manual-send")
+        .addEventListener("click", () => {
+          const base = document.getElementById("input-base").value;
+          const arm1 = document.getElementById("input-arm1").value;
+          const arm2 = document.getElementById("input-arm2").value;
+          const speed = document.getElementById("input-speed").value;
+
+          fetch("/send_command/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              base: parseInt(base),
+              arm1: parseInt(arm1),
+              arm2: parseInt(arm2),
+              speed: parseInt(speed),
+              gripper: 0,
+            }),
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.success) {
+                logMessage(
+                  `Comando enviado: base=${base}, arm1=${arm1}, arm2=${arm2}, speed=${speed}`,
+                  true
+                );
+              } else {
+                logMessage(
+                  `Error al enviar comando: ${data.error || "desconocido"}`,
+                  false
+                );
+              }
+            })
+            .catch((err) => {
+              logMessage(`Error de red o servidor: ${err}`, false);
+            });
+        });
+
+      // Mensaje inicial
+      document.addEventListener("DOMContentLoaded", () => {
+        logMessage("✅ Interfaz cargada correctamente", true);
+      });
+    </script>
+  </body>
+</html>

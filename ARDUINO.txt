@@ -1,0 +1,224 @@
+#include <AccelStepper.h>
+#include <Servo.h>
+
+//////////////////////////////// ESLABON 1 ////////////////////////////
+const int J1stepPin = 2;
+const int J1dirPin  = 5;
+AccelStepper J1Motor(AccelStepper::DRIVER, J1stepPin, J1dirPin);
+
+// Conversión de ángulo a pasos
+double q1AngleToSteps = (200.0 / 360.0) * (62.0 / 20.0);
+long J1Position = 0;
+
+//////////////////////////////// ESLABON 2 ////////////////////////////
+const int J2stepPin = 3;
+const int J2dirPin  = 6;
+AccelStepper J2Motor(AccelStepper::DRIVER, J2stepPin, J2dirPin);
+
+// Conversión de ángulo a pasos
+double q2AngleToSteps = (200.0 / 360.0) * (62.0 / 20.0);
+long J2Position = 0;
+
+//////////////////////////// Z /////////////////////////////////////
+const int zstepPin = 4;
+const int zdirPin  = 7;
+AccelStepper zMotor(AccelStepper::DRIVER, zstepPin, zdirPin);
+
+// Conversión de distancia a pasos
+double zDistanceToSteps = 200.0 / 2.0;
+long zPosition       = 0;
+// Guardaremos la última posición “aceptada” para Z
+long prevZPosition   = 0;
+
+// Velocidad y aceleración fijas para Z
+const float Z_MAX_SPEED    = 50.0;   // pasos/s (< 100)
+const float Z_ACCELERATION = 100.0;  // pasos/s²
+
+////////////////////////// PINZA //////////////////////////////
+Servo myServo;
+const int pinServo = 11;
+
+// Ángulos del servo
+const int angleOpen   = 180;  // Pinza ABIERTA
+const int angleClosed = 119;  // Pinza CERRADA
+
+int  currentAngle        = angleOpen;    // Estado inicial: abierta
+bool currentGripperState = false;        // false = abierta, true = cerrada
+
+///////////////////// COMUNICACIÓN SERIAL ////////////////
+String inputString    = "";
+bool   stringComplete = false;
+const char separator  = ',';
+const int  dataLength = 5;
+double datos[dataLength];
+
+void setup() {
+  Serial.begin(9600);
+
+  // Configuración de J1
+  J1Motor.setAcceleration(500);
+  J1Motor.setCurrentPosition(0);
+  // Si J1 solo giraba en un sentido, invierte DIR con true o false según cableado
+  J1Motor.setPinsInverted(/*invertDir=*/ true, /*invertStep=*/ false, /*invertEnable=*/ false);
+
+  // Configuración de J2
+  J2Motor.setAcceleration(500);
+  J2Motor.setCurrentPosition(0);
+
+  // Configuración de Z con aceleración y velocidad fija
+  zMotor.setAcceleration(Z_ACCELERATION);
+  zMotor.setCurrentPosition(0);
+  zMotor.setMaxSpeed(Z_MAX_SPEED);
+
+  // Inicializar servo
+  myServo.attach(pinServo);
+  myServo.write(angleOpen);
+  currentAngle = angleOpen;
+  currentGripperState = false;
+
+  // Inicialmente, Z está en 0, así que prevZPosition=0
+  prevZPosition = 0;
+  zPosition     = 0;
+
+  Serial.println("Sistema iniciado - Pinza ABIERTA (180°)");
+  delay(1000);
+}
+
+void loop() {
+  ////////// SI TERMINÓ DE RECIBIR LÍNEA /////////////
+  if (stringComplete) {
+    // 1) Contar cuántas comas trae el string
+    int commaCount = 0;
+    for (unsigned int i = 0; i < inputString.length(); i++) {
+      if (inputString.charAt(i) == separator) {
+        commaCount++;
+      }
+    }
+
+    // Solo parseamos si hay exactamente 4 comas (5 campos)
+    if (commaCount == dataLength - 1) {
+      // 2) Parsear los 5 valores
+      String temp = inputString; // copia
+      for (int i = 0; i < dataLength; i++) {
+        int index = temp.indexOf(separator);
+        if (index == -1) {
+          datos[i] = temp.toFloat();
+        } else {
+          datos[i] = temp.substring(0, index).toFloat();
+          temp = temp.substring(index + 1);
+        }
+      }
+
+      // =========================
+      //   ASIGNAR POSICIONES
+      // =========================
+
+      // Eslabón 1:
+      J1Position = (long)(datos[0] * q1AngleToSteps);
+
+      // Eslabón 2 (suma datos[1] + datos[0]):
+      J2Position = (long)((datos[1] + datos[0]) * q2AngleToSteps);
+
+      // Base Z: calculamos la posición deseada
+      long desiredZ = (long)(datos[2] * zDistanceToSteps);
+
+      // Solo actualizamos zPosition si cambió
+      if (desiredZ != prevZPosition) {
+        zPosition     = desiredZ;
+        prevZPosition = desiredZ;
+      }
+      // si es igual, dejamos zPosition como estaba (no se moverá)
+
+      // =========================
+      //     CONTROL DE PINZA
+      // =========================
+      if (datos[3] == 1) {
+        if (!currentGripperState) {
+          Serial.println("Comando recibido: CERRAR pinza");
+          myServo.write(angleClosed);
+          currentAngle = angleClosed;
+          currentGripperState = true;
+          Serial.print("Pinza CERRADA a ");
+          Serial.print(angleClosed);
+          Serial.println("°");
+          delay(500);
+        } else {
+          Serial.println("Pinza ya está cerrada - comando ignorado");
+        }
+      }
+      else if (datos[3] == 0) {
+        if (currentGripperState) {
+          Serial.println("Comando recibido: ABRIR pinza");
+          myServo.write(angleOpen);
+          currentAngle = angleOpen;
+          currentGripperState = false;
+          Serial.print("Pinza ABIERTA a ");
+          Serial.print(angleOpen);
+          Serial.println("°");
+          delay(500);
+        } else {
+          Serial.println("Pinza ya está abierta - comando ignorado");
+        }
+      }
+      // Si datos[3] no es 0 ni 1, no hacemos nada con el servo
+
+      // =========================
+      //    ASIGNAR VELOCIDADES
+      // =========================
+      float velocidad = datos[4];
+      // Eslabones 1 y 2 sí cambian su velocidad
+      J1Motor.setMaxSpeed(velocidad);
+      J2Motor.setMaxSpeed(velocidad);
+      // Z ya tiene fija su velocidad en setup()
+      
+      // =========================
+      //       DEBUG SERIAL
+      // =========================
+      Serial.print("Datos recibidos: arm1=");
+      Serial.print(datos[0]);
+      Serial.print(", arm2=");
+      Serial.print(datos[1]);
+      Serial.print(", base=");
+      Serial.print(datos[2]);
+      Serial.print(", gripper=");
+      Serial.print(datos[3]);
+      Serial.print(", speed=");
+      Serial.println(datos[4]);
+    }
+    else {
+      // Línea inválida: descartamos sin cambiar nada
+      Serial.println("Línea descartada: número de campos inválido");
+    }
+
+    // Limpiar buffer y flag
+    inputString = "";
+    stringComplete = false;
+  }
+
+  // =========================
+  //    MOVER MOTORES A POS
+  // =========================
+  J1Motor.moveTo(J1Position);
+  J2Motor.moveTo(J2Position);
+  zMotor.moveTo(zPosition);
+
+  // Ejecutar hasta alcanzar objetivos. Si zPosition no cambió, zMotor.run() no hará nada en Z.
+  while (J1Motor.currentPosition() != J1Position ||
+         J2Motor.currentPosition() != J2Position ||
+         zMotor.currentPosition() != zPosition) {
+    J1Motor.run();
+    J2Motor.run();
+    zMotor.run();
+  }
+}
+
+// Recepción en buffer serial (cada línea termina en '\n')
+void serialEvent() {
+  while (Serial.available()) {
+    char inChar = (char)Serial.read();
+    inputString += inChar;
+    if (inChar == '\n') {
+      stringComplete = true;
+    }
+  }
+}
