@@ -45,7 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
         base:      { x:   -5,   y:   40,    z: -8.2,  rotationX: 0, rotationY: 0, rotationZ: 0 },
         arm1:      { x:   -7,   y:   32.025, z: -45.52, rotationX: 0, rotationY: 0, rotationZ: 0 },
         // Brazo 2 arranca rotado -90°; no necesita x/y/z aquí
-        arm2:      { rotationX: 0, rotationY: 0, rotationZ: -90 }
+        arm2:      { rotationX: 0, rotationY: 0, rotationZ: -360 }
     };
 
     const ARM1_LENGTH = 80;
@@ -192,13 +192,16 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             // ─── Estructura y base ─────────────────────────────────────────────
             structureMesh = await loadSTL(STL_PATHS.structure);
+            structureMesh.material.color.set(0xFFFF66); 
             structureGroup = new THREE.Group();
             structureGroup.name = "Structure_Group";
             structureGroup.add(structureMesh);
             scaraRobotModelGroup.add(structureGroup);
 
             baseMesh = await loadSTL(STL_PATHS.base);
+            baseMesh.material.color.set(0x8B4513)
             baseGroup = new THREE.Group();
+            
             baseGroup.name = "Base_Z_Movable_Group";
             baseGroup.add(baseMesh);
             structureGroup.add(baseGroup);
@@ -220,6 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             //  3) Cargamos la malla de brazo 1 y creamos su grupo
             arm1Mesh = await loadSTL(STL_PATHS.arm1);
+            arm1Mesh.material.color.set(0xFFFFFF);
             arm1Group = new THREE.Group();
             arm1Group.name = "Arm1_Rotary_Group";
             // Colocar la malla de brazo 1 de modo que su tope superior quede en (0,0,0) del grupo
@@ -247,10 +251,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
             //  3) Cargamos la malla de brazo 2 y centramos su extremo superior en (0,0,0) de arm2Group:
             arm2Mesh = await loadSTL(STL_PATHS.arm2);
+            arm2Mesh.material.color.set(0x3CB371);
             arm2Group = new THREE.Group();
             arm2Group.name = "Arm2_Rotary_Group";
             //     Sacamos la malla de forma que su “tope superior” (punto de articulación) quede en (0,0,0):
-            arm2Mesh.position.set(57, -ARM2_LENGTH +60, -15);
+            arm2Mesh.position.set(0, -ARM2_LENGTH , -15);
             arm2Group.add(arm2Mesh);
 
             //  4) Insertamos arm2Group dentro de pivot2Group:

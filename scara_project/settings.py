@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'scara_control',  # Custom app for SCARA control
     'rest_framework',
     'control',
+    
 ]
 
 MIDDLEWARE = [

@@ -12,7 +12,7 @@ class ArduinoController:
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls, port='COM4', baud=9600):
+    def __new__(cls, port='COM10', baud=9600):
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super(ArduinoController, cls).__new__(cls)
