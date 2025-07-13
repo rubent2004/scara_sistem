@@ -198,7 +198,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ? "🔓 Abrir Pinza (180°)"
         : "🔒 Cerrar Pinza (119°)";
       btnGrip.className = appState.gripperClosed
-        ? "btn btn-warning"
+        ? "btn btn-warning bg-black"
         : "btn btn-success";
       
       const gripperColor = appState.gripperClosed ? "#ff6b6b" : "#51cf66";

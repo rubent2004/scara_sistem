@@ -266,7 +266,9 @@
           <h2 class="text-lg font-semibold mb-2 text-gray-200">
             Ingreso Directo
           </h2>
+          <label for="" class="text-white">[Base,  Brazo 1,  Brazo 2]</label>
           <div class="grid grid-cols-4 gap-2 mb-3">
+            
             <input
               id="input-base"
               type="number"
@@ -293,16 +295,6 @@
               value="-30"
               class="bg-gray-700 p-2 rounded text-center text-white focus:ring focus:ring-blue-500"
               placeholder="Brazo 2"
-            />
-            <!-- NUEVO: Input para Velocidad Manual -->
-            <input
-              id="input-speed"
-              type="number"
-              min="1"
-              max="1000"
-              value="500"
-              class="bg-gray-700 p-2 rounded text-center text-white focus:ring focus:ring-blue-500"
-              placeholder="Velocidad"
             />
           </div>
           <button
@@ -363,7 +355,14 @@
             </div>
           </div>
         </div>
-
+ <div class="bg-yellow-600 text-center hover:bg-yellow-500 py-2 rounded text-white font-medium col-span-2">
+          <button
+            id="btn-grip-toggle"
+            class="modern-btn bg-yellow-600 hover:bg-yellow-500 py-2 rounded text-white font-medium col-span-2"
+          >
+            🤏 Tomar / Soltar
+          </button>
+          </div>
         <!-- Velocidad Única (Global) -->
         <div
           class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700"
@@ -413,12 +412,8 @@
           >
             ▶️ Secuencia
           </button>
-          <button
-            id="btn-grip-toggle"
-            class="modern-btn bg-yellow-600 hover:bg-yellow-500 py-2 rounded text-white font-medium col-span-2"
-          >
-            🤏 Tomar / Soltar
-          </button>
+         
+         
           <!-- NUEVO: Botón “Aplicar Movimientos” que dispara la función en ps4_settings.js -->
           <button
             id="apply-movement-btn"
